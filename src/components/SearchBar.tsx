@@ -13,6 +13,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [searched, setSearched] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -44,12 +45,14 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
       setError(err instanceof Error ? err.message : 'Error al buscar')
     } finally {
       setLoading(false)
+      setSearched(true)
     }
   }, [])
 
   const handleChange = (value: string) => {
     setQuery(value)
     setError(null)
+    setSearched(false)
     clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => search(value), DEBOUNCE_MS)
   }
@@ -101,7 +104,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
         <ul className="absolute z-20 mt-1 w-full rounded-lg border border-stone-600 bg-stone-800 shadow-xl">
           {suggestions.map((s, i) => (
             <li
-              key={`${s.lat}-${s.lng}-${i}`}
+              key={`${s.lat ?? 'x'}-${s.lng ?? 'x'}-${i}`}
               onMouseDown={() => handleSelect(s)}
               className="cursor-pointer px-4 py-2.5 text-sm text-stone-200 transition-colors hover:bg-stone-700 first:rounded-t-lg last:rounded-b-lg"
             >
@@ -109,6 +112,15 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
             </li>
           ))}
         </ul>
+      )}
+
+      {searched && !open && suggestions.length === 0 && query.trim().length >= 2 && (
+        <div className="mt-1 rounded-lg border border-stone-700 bg-stone-800/50 px-3 py-2 text-xs text-stone-400">
+          <p>Sin resultados para <span className="font-medium text-stone-300">"{query}"</span></p>
+          <p className="mt-0.5 text-stone-500">
+            El buscador reconoce calles, avenidas y lugares, pero no números de calle. Probá con el nombre de la calle sin número.
+          </p>
+        </div>
       )}
     </div>
   )
