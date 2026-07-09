@@ -11,6 +11,7 @@ interface DestinationListProps {
   destinations: Destination[]
   onRemove: (id: string) => void
   onReorder: (startIndex: number, endIndex: number) => void
+  onFocus: (dest: Destination) => void
   maxWarn?: boolean
 }
 
@@ -18,10 +19,12 @@ function SortableItem({
   dest,
   index,
   onRemove,
+  onFocus,
 }: {
   dest: Destination
   index: number
   onRemove: (id: string) => void
+  onFocus: (dest: Destination) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: dest.id })
@@ -36,7 +39,8 @@ function SortableItem({
     <li
       ref={setNodeRef}
       style={style}
-      className="group flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-stone-700/50"
+      onClick={() => onFocus(dest)}
+      className="group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-stone-700/50"
       {...attributes}
       {...listeners}
     >
@@ -76,6 +80,7 @@ export default function DestinationList({
   destinations,
   onRemove,
   onReorder,
+  onFocus,
   maxWarn,
 }: DestinationListProps) {
   if (destinations.length === 0) {
@@ -111,7 +116,7 @@ export default function DestinationList({
         >
           <ul className="space-y-1">
             {destinations.map((dest, i) => (
-              <SortableItem key={dest.id} dest={dest} index={i} onRemove={onRemove} />
+              <SortableItem key={dest.id} dest={dest} index={i} onRemove={onRemove} onFocus={onFocus} />
             ))}
           </ul>
         </SortableContext>

@@ -6,10 +6,11 @@ import type { Destination } from '../lib/types'
 interface MapViewProps {
   destinations: Destination[]
   routeGeometry: GeoJSON.LineString | null
+  focusCoord: { lat: number; lng: number } | null
   onMapClick?: (lat: number, lng: number) => void
 }
 
-export default function MapView({ destinations, routeGeometry, onMapClick }: MapViewProps) {
+export default function MapView({ destinations, routeGeometry, focusCoord, onMapClick }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MaplibreMap | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
@@ -120,6 +121,13 @@ export default function MapView({ destinations, routeGeometry, onMapClick }: Map
       },
     })
   }, [routeGeometry])
+
+  // Fly to focused coordinate when a destination is clicked in the list
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !focusCoord) return
+    map.flyTo({ center: [focusCoord.lng, focusCoord.lat], zoom: 16, duration: 800 })
+  }, [focusCoord])
 
   return <div ref={containerRef} className="h-full w-full" />
 }

@@ -40,6 +40,7 @@ let nextId = 1
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [showMissingKeyBanner, setShowMissingKeyBanner] = useState(() => !ORS_API_KEY)
+  const [focusCoord, setFocusCoord] = useState<{ lat: number; lng: number } | null>(null)
   const directionsAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -178,6 +179,7 @@ export default function App() {
             destinations={state.destinations}
             onRemove={removeDestination}
             onReorder={reorderDestinations}
+            onFocus={(d) => setFocusCoord({ lat: d.lat, lng: d.lng })}
             maxWarn={state.maxWarn}
           />
         </div>
@@ -211,6 +213,7 @@ export default function App() {
         <MapView
           destinations={state.route?.orderedDestinations ?? state.destinations}
           routeGeometry={state.route?.geometry ?? null}
+          focusCoord={focusCoord}
           onMapClick={async (lat, lng) => {
             try {
               const label = await reverseGeocode(lat, lng);
