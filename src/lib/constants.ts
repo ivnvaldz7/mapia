@@ -12,8 +12,5 @@ export const DEBOUNCE_MS = 400
 
 export const MAX_DESTINATIONS = 10
 
-/** Country filter for geocoding autocomplete (ISO 3166-1 alpha-2) */
-export const GEOCODING_COUNTRY = 'AR'
-
 /** Fuel efficiency in liters per 100 km */
 export const FUEL_LITERS_PER_100KM = 8

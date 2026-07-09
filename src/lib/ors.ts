@@ -1,11 +1,14 @@
-import { ORS_BASE_URL, ORS_API_KEY, GEOCODING_COUNTRY } from './constants'
+import { ORS_BASE_URL, ORS_API_KEY } from './constants'
 import type { Destination, DirectionsResult } from './types'
 
 export interface GeocodingResult {
   label: string
-  lat: number | null
-  lng: number | null
+  lat: number
+  lng: number
 }
+
+/** Photon geocoding — free, no API key, supports street numbers in Argentina */
+const PHOTON_URL = 'https://photon.komoot.io/api/'
 
 async function orsFetch(endpoint: string, body: unknown, signal?: AbortSignal) {
   const res = await fetch(`${ORS_BASE_URL}${endpoint}`, {
@@ -27,38 +30,36 @@ async function orsFetch(endpoint: string, body: unknown, signal?: AbortSignal) {
 }
 
 export async function geocode(query: string, signal?: AbortSignal): Promise<GeocodingResult[]> {
-  const params = new URLSearchParams({
-    text: query,
-    size: '5',
-    'boundary.country': GEOCODING_COUNTRY,
-  })
-  if (ORS_API_KEY) params.append('api_key', ORS_API_KEY)
+  const params = new URLSearchParams({ q: query, limit: '5' })
 
-  const res = await fetch(`${ORS_BASE_URL}/geocode/autocomplete?${params.toString()}`, {
+  const res = await fetch(`${PHOTON_URL}?${params.toString()}`, {
     method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-    },
+    headers: { 'Accept': 'application/json' },
     signal,
   })
 
   if (!res.ok) {
-    throw new Error('Geocoding autocomplete failed')
+    throw new Error('Error al buscar direcciones')
   }
 
   const data = await res.json()
 
-  const raw: GeocodingResult[] = (data.features ?? [])
-    .map((f: Record<string, unknown>) => {
-      const coords = (f.geometry as { coordinates?: [number, number] })?.coordinates
-      const [lng, lat] = coords ?? [null, null]
+  return (data.features ?? [])
+    .map((f: { geometry: { coordinates: [number, number] }; properties: { name?: string; street?: string; housenumber?: string; city?: string; country?: string } }) => {
+      const [lng, lat] = f.geometry?.coordinates ?? [null, null]
+      if (lat == null || lng == null) return null
+
+      const p = f.properties
+      const parts = [p.street, p.housenumber].filter(Boolean)
+      const label = parts.length > 0 ? parts.join(' ') : p.name ?? ''
+      const city = p.city ?? ''
       return {
-        label: (f.properties as { label?: string })?.label ?? '',
+        label: city ? `${label}, ${city}` : label,
         lat,
         lng,
       }
     })
-  return raw.filter((r) => !!r.label)
+    .filter((r: GeocodingResult | null): r is GeocodingResult => r !== null && !!r.label)
 }
 
 export async function reverseGeocode(lat: number, lng: number): Promise<string> {
