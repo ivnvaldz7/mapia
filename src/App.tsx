@@ -41,7 +41,14 @@ export default function App() {
   const [route, setRoute] = useState<RouteResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [maxWarn, setMaxWarn] = useState(false)
   const directionsAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    if (!maxWarn) return
+    const t = setTimeout(() => setMaxWarn(false), 3000)
+    return () => clearTimeout(t)
+  }, [maxWarn])
 
   useEffect(() => {
     if (!ORS_API_KEY) {
@@ -50,25 +57,55 @@ export default function App() {
   }, [])
 
   const addDestination = useCallback((result: GeocodingResult) => {
-    setDestinations((prev) => {
-      if (prev.length >= MAX_DESTINATIONS) return prev
-      return [
-        ...prev,
-        {
-          id: String(nextId++),
-          name: result.label,
-          lat: result.lat,
-          lng: result.lng,
-        },
-      ]
-    })
+    if (destinations.length >= MAX_DESTINATIONS) {
+      setMaxWarn(true)
+      return
+    }
+    setDestinations((prev) => [
+      ...prev,
+      {
+        id: String(nextId++),
+        name: result.label,
+        lat: result.lat,
+        lng: result.lng,
+      },
+    ])
     setRoute(null)
-  }, [])
+  }, [destinations])
+
+  const handleOptimize = useCallback(async (dests?: Destination[]) => {
+    const targets = dests ?? destinations
+    if (targets.length < 2) return
+    setLoading(true)
+    setRoute(null)
+
+    try {
+      const { orderedDestinations, directions } = await optimizeRoute(targets)
+      setRoute(createRouteResult(orderedDestinations, directions))
+      
+      // Update the destinations list to match the optimized order
+      setDestinations(orderedDestinations)
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return
+      console.error('Route optimization failed:', err)
+      const msg = err instanceof Error ? err.message : String(err)
+      setErrorMsg(`Error al optimizar la ruta: ${msg}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [destinations])
 
   const removeDestination = useCallback((id: string) => {
-    setDestinations((prev) => prev.filter((d) => d.id !== id))
-    setRoute((prev) => (prev ? null : prev))
-  }, [])
+    const remaining = destinations.filter((d) => d.id !== id)
+    setDestinations(remaining)
+
+    if (!route || remaining.length < 2) {
+      setRoute(null)
+      return
+    }
+
+    handleOptimize(remaining)
+  }, [destinations, route, handleOptimize])
 
   const handleReorderDirections = useCallback(async (dests: Destination[]) => {
     directionsAbortRef.current?.abort()
@@ -100,27 +137,6 @@ export default function App() {
     }
   }, [destinations, route, handleReorderDirections])
 
-  const handleOptimize = useCallback(async () => {
-    if (destinations.length < 2) return
-    setLoading(true)
-    setRoute(null)
-
-    try {
-      const { orderedDestinations, directions } = await optimizeRoute(destinations)
-      setRoute(createRouteResult(orderedDestinations, directions))
-      
-      // Update the destinations list to match the optimized order
-      setDestinations(orderedDestinations)
-    } catch (err) {
-      console.error('Route optimization failed:', err)
-      const msg = err instanceof Error ? err.message : String(err)
-      setErrorMsg(`Error al optimizar la ruta: ${msg}`)
-      alert(`Fallo en la optimización: ${msg}\n\nSi el error es CORS, puede que la API Key sea inválida o el endpoint esté bloqueado.`)
-    } finally {
-      setLoading(false)
-    }
-  }, [destinations])
-
   return (
     <div className="flex h-svh w-svw flex-col bg-stone-900 text-white md:flex-row">
       {/* Sidebar */}
@@ -151,23 +167,32 @@ export default function App() {
             destinations={destinations}
             onRemove={removeDestination}
             onReorder={reorderDestinations}
+            maxWarn={maxWarn}
           />
         </div>
 
         {/* Route panel */}
         <div className="border-t border-stone-700 p-4">
           {errorMsg && (
-            <p className="mb-2 rounded bg-red-900/50 px-3 py-2 text-xs text-red-300">
-              {errorMsg}
-            </p>
+            <div className="mb-2 flex items-start gap-2 rounded bg-red-900/50 px-3 py-2 text-xs text-red-300">
+              <span className="flex-1">{errorMsg}</span>
+              <button
+                onClick={() => setErrorMsg(null)}
+                className="shrink-0 rounded p-0.5 text-red-400 transition-colors hover:text-red-200"
+                title="Descartar"
+              >
+                <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           )}
-          <div onClick={route ? undefined : handleOptimize}>
-            <RoutePanel
-              destinations={destinations}
-              route={route}
-              loading={loading}
-            />
-          </div>
+          <RoutePanel
+            destinations={destinations}
+            route={route}
+            loading={loading}
+            onOptimize={!route ? handleOptimize : undefined}
+          />
         </div>
       </aside>
 

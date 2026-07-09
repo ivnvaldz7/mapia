@@ -26,7 +26,7 @@ async function orsFetch(endpoint: string, body: unknown, signal?: AbortSignal) {
   return res.json()
 }
 
-export async function geocode(query: string): Promise<GeocodingResult[]> {
+export async function geocode(query: string, signal?: AbortSignal): Promise<GeocodingResult[]> {
   const params = new URLSearchParams({
     text: query,
     size: '5',
@@ -38,7 +38,8 @@ export async function geocode(query: string): Promise<GeocodingResult[]> {
     method: 'GET',
     headers: {
       'Accept': 'application/json',
-    }
+    },
+    signal,
   })
 
   if (!res.ok) {
@@ -135,6 +136,10 @@ export async function optimizeRoute(destinations: Destination[]): Promise<{ orde
 
   const data = await orsFetch('/optimization', { jobs, vehicles });
   
+  if (data.code !== 0) {
+    throw new Error(data.error || 'Error en la optimización de ruta')
+  }
+
   const optimizedDestinations: Destination[] = [destinations[0]];
   const steps = data.routes[0].steps;
   

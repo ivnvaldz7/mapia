@@ -14,6 +14,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!error) return
@@ -26,13 +27,19 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
       setSuggestions([])
       return
     }
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setLoading(true)
     try {
-      const results = await geocode(q)
+      const results = await geocode(q, controller.signal)
       setSuggestions(results)
       setOpen(results.length > 0)
       setError(null)
     } catch (err) {
+      if ((err as Error).name === 'AbortError') return
       setSuggestions([])
       setError(err instanceof Error ? err.message : 'Error al buscar')
     } finally {
