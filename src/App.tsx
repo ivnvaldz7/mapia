@@ -42,6 +42,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [maxWarn, setMaxWarn] = useState(false)
+  const [showMissingKeyBanner, setShowMissingKeyBanner] = useState(() => !ORS_API_KEY)
   const directionsAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -49,12 +50,6 @@ export default function App() {
     const t = setTimeout(() => setMaxWarn(false), 3000)
     return () => clearTimeout(t)
   }, [maxWarn])
-
-  useEffect(() => {
-    if (!ORS_API_KEY) {
-      alert("ATENCIÓN: Tu navegador no detecta la API Key. Por favor corta tu servidor 'npm run dev' en tu terminal, volvelo a ejecutar y apretá F5.")
-    }
-  }, [])
 
   const addDestination = useCallback((result: GeocodingResult) => {
     if (destinations.length >= MAX_DESTINATIONS) {
@@ -142,13 +137,31 @@ export default function App() {
       {/* Sidebar */}
       <aside className="flex w-full flex-col overflow-y-auto border-stone-700 bg-stone-900 md:w-96 md:border-r">
         {/* Header */}
-        <header className="border-b border-stone-700 p-4">
-          <h1 className="text-lg font-bold tracking-tight">
-            mapia{' '}
-            <span className="text-xs font-normal text-stone-500">
-              — optimizador de rutas
-            </span>
-          </h1>
+        <header className="border-b border-stone-700">
+          <div className="p-4">
+            <h1 className="text-lg font-bold tracking-tight">
+              mapia{' '}
+              <span className="text-xs font-normal text-stone-500">
+                — optimizador de rutas
+              </span>
+            </h1>
+          </div>
+          {showMissingKeyBanner && (
+            <div className="flex items-start gap-2 border-t border-amber-700 bg-amber-900/60 px-4 py-2 text-xs text-amber-200">
+              <span className="flex-1">
+                API Key no detectada. Configurá <code className="rounded bg-amber-800/50 px-1">VITE_ORS_API_KEY</code> en tu entorno.
+              </span>
+              <button
+                onClick={() => setShowMissingKeyBanner(false)}
+                className="shrink-0 rounded p-0.5 text-amber-300 transition-colors hover:text-amber-100"
+                title="Descartar"
+              >
+                <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
         </header>
 
         {/* Search */}

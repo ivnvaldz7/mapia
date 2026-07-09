@@ -1,4 +1,4 @@
-import { ORS_BASE_URL, ORS_API_KEY } from './constants'
+import { ORS_BASE_URL, ORS_API_KEY, GEOCODING_COUNTRY } from './constants'
 import type { Destination, DirectionsResult } from './types'
 
 export interface GeocodingResult {
@@ -30,7 +30,7 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Geoc
   const params = new URLSearchParams({
     text: query,
     size: '5',
-    'boundary.country': 'AR',
+    'boundary.country': GEOCODING_COUNTRY,
   })
   if (ORS_API_KEY) params.append('api_key', ORS_API_KEY)
 
