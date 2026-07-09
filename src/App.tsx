@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useReducer } from 'react'
 import MapView from './components/MapView'
 import SearchBar from './components/SearchBar'
 import DestinationList from './components/DestinationList'
@@ -6,6 +6,7 @@ import RoutePanel from './components/RoutePanel'
 import { optimizeRoute, getDirections } from './lib/ors'
 import { estimateFuelConsumption } from './lib/fuel'
 import { MAX_DESTINATIONS, ORS_API_KEY } from './lib/constants'
+import { reducer, initialState } from './lib/reducer'
 import type { Destination, RouteResult, DirectionsResult } from './lib/types'
 import type { GeocodingResult } from './lib/ors'
 
@@ -37,100 +38,93 @@ function createRouteResult(ordered: Destination[], dir: DirectionsResult): Route
 let nextId = 1
 
 export default function App() {
-  const [destinations, setDestinations] = useState<Destination[]>([])
-  const [route, setRoute] = useState<RouteResult | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [maxWarn, setMaxWarn] = useState(false)
+  const [state, dispatch] = useReducer(reducer, initialState)
   const [showMissingKeyBanner, setShowMissingKeyBanner] = useState(() => !ORS_API_KEY)
   const directionsAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    if (!maxWarn) return
-    const t = setTimeout(() => setMaxWarn(false), 3000)
+    if (!state.maxWarn) return
+    const t = setTimeout(() => dispatch({ type: 'SET_MAX_WARN', payload: false }), 3000)
     return () => clearTimeout(t)
-  }, [maxWarn])
+  }, [state.maxWarn])
 
   const addDestination = useCallback((result: GeocodingResult) => {
-    if (destinations.length >= MAX_DESTINATIONS) {
-      setMaxWarn(true)
+    if (state.destinations.length >= MAX_DESTINATIONS) {
+      dispatch({ type: 'SET_MAX_WARN', payload: true })
       return
     }
-    setDestinations((prev) => [
-      ...prev,
-      {
+    dispatch({
+      type: 'ADD_DESTINATION',
+      payload: {
         id: String(nextId++),
         name: result.label,
         lat: result.lat,
         lng: result.lng,
       },
-    ])
-    setRoute(null)
-  }, [destinations])
+    })
+  }, [state.destinations.length])
 
   const handleOptimize = useCallback(async (dests?: Destination[]) => {
-    const targets = dests ?? destinations
+    const targets = dests ?? state.destinations
     if (targets.length < 2) return
-    setLoading(true)
-    setRoute(null)
+    dispatch({ type: 'SET_LOADING', payload: true })
+    dispatch({ type: 'SET_ROUTE', payload: null })
 
     try {
       const { orderedDestinations, directions } = await optimizeRoute(targets)
-      setRoute(createRouteResult(orderedDestinations, directions))
-      
-      // Update the destinations list to match the optimized order
-      setDestinations(orderedDestinations)
+      dispatch({ type: 'SET_ROUTE', payload: createRouteResult(orderedDestinations, directions) })
+      dispatch({ type: 'SET_DESTINATIONS', payload: orderedDestinations })
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       console.error('Route optimization failed:', err)
       const msg = err instanceof Error ? err.message : String(err)
-      setErrorMsg(`Error al optimizar la ruta: ${msg}`)
+      dispatch({ type: 'SET_ERROR', payload: `Error al optimizar la ruta: ${msg}` })
     } finally {
-      setLoading(false)
+      dispatch({ type: 'SET_LOADING', payload: false })
     }
-  }, [destinations])
+  }, [state.destinations])
 
   const removeDestination = useCallback((id: string) => {
-    const remaining = destinations.filter((d) => d.id !== id)
-    setDestinations(remaining)
+    const remaining = state.destinations.filter((d) => d.id !== id)
+    dispatch({ type: 'SET_DESTINATIONS', payload: remaining })
 
-    if (!route || remaining.length < 2) {
-      setRoute(null)
+    if (!state.route || remaining.length < 2) {
+      dispatch({ type: 'SET_ROUTE', payload: null })
       return
     }
 
     handleOptimize(remaining)
-  }, [destinations, route, handleOptimize])
+  }, [state.destinations, state.route, handleOptimize])
 
   const handleReorderDirections = useCallback(async (dests: Destination[]) => {
     directionsAbortRef.current?.abort()
     const controller = new AbortController()
     directionsAbortRef.current = controller
 
-    setLoading(true)
+    dispatch({ type: 'SET_LOADING', payload: true })
     try {
       const dir = await getDirections(dests, controller.signal)
-      setRoute(createRouteResult(dests, dir))
+      dispatch({ type: 'SET_ROUTE', payload: createRouteResult(dests, dir) })
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       const msg = err instanceof Error ? err.message : 'Error al calcular la ruta'
-      setErrorMsg(msg)
-      setRoute(null)
+      dispatch({ type: 'SET_ERROR', payload: msg })
+      dispatch({ type: 'SET_ROUTE', payload: null })
     } finally {
-      setLoading(false)
+      dispatch({ type: 'SET_LOADING', payload: false })
     }
   }, [])
 
   const reorderDestinations = useCallback((from: number, to: number) => {
-    const reordered = [...destinations]
+    const reordered = [...state.destinations]
     const [moved] = reordered.splice(from, 1)
     reordered.splice(to, 0, moved)
-    setDestinations(reordered)
+    dispatch({ type: 'SET_DESTINATIONS', payload: reordered })
 
-    if (route) {
+    if (state.route) {
       handleReorderDirections(reordered)
     }
-  }, [destinations, route, handleReorderDirections])
+  }, [state.destinations, state.route, handleReorderDirections])
 
   return (
     <div className="flex h-svh w-svw flex-col bg-stone-900 text-white md:flex-row">
@@ -173,24 +167,24 @@ export default function App() {
         <div className="flex-1 overflow-y-auto p-4">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-stone-400">
-              Destinos ({destinations.length}/{MAX_DESTINATIONS})
+              Destinos ({state.destinations.length}/{MAX_DESTINATIONS})
             </h2>
           </div>
           <DestinationList
-            destinations={destinations}
+            destinations={state.destinations}
             onRemove={removeDestination}
             onReorder={reorderDestinations}
-            maxWarn={maxWarn}
+            maxWarn={state.maxWarn}
           />
         </div>
 
         {/* Route panel */}
         <div className="border-t border-stone-700 p-4">
-          {errorMsg && (
+          {state.errorMsg && (
             <div className="mb-2 flex items-start gap-2 rounded bg-red-900/50 px-3 py-2 text-xs text-red-300">
-              <span className="flex-1">{errorMsg}</span>
+              <span className="flex-1">{state.errorMsg}</span>
               <button
-                onClick={() => setErrorMsg(null)}
+                onClick={() => dispatch({ type: 'SET_ERROR', payload: null })}
                 className="shrink-0 rounded p-0.5 text-red-400 transition-colors hover:text-red-200"
                 title="Descartar"
               >
@@ -201,18 +195,18 @@ export default function App() {
             </div>
           )}
           <RoutePanel
-            destinations={destinations}
-            route={route}
-            loading={loading}
-            onOptimize={!route ? handleOptimize : undefined}
+            destinations={state.destinations}
+            route={state.route}
+            loading={state.loading}
+            onOptimize={!state.route ? handleOptimize : undefined}
           />
         </div>
       </aside>
 
       <main className="flex-1">
         <MapView
-          destinations={route?.orderedDestinations ?? destinations}
-          routeGeometry={route?.geometry ?? null}
+          destinations={state.route?.orderedDestinations ?? state.destinations}
+          routeGeometry={state.route?.geometry ?? null}
           onMapClick={async (lat, lng) => {
             try {
               const { reverseGeocode } = await import('./lib/ors');
