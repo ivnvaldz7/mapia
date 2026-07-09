@@ -3,7 +3,7 @@ import MapView from './components/MapView'
 import SearchBar from './components/SearchBar'
 import DestinationList from './components/DestinationList'
 import RoutePanel from './components/RoutePanel'
-import { optimizeRoute, getDirections } from './lib/ors'
+import { optimizeRoute, getDirections, reverseGeocode } from './lib/ors'
 import { estimateFuelConsumption } from './lib/fuel'
 import { MAX_DESTINATIONS, ORS_API_KEY } from './lib/constants'
 import { reducer, initialState } from './lib/reducer'
@@ -209,7 +209,6 @@ export default function App() {
           routeGeometry={state.route?.geometry ?? null}
           onMapClick={async (lat, lng) => {
             try {
-              const { reverseGeocode } = await import('./lib/ors');
               const label = await reverseGeocode(lat, lng);
               addDestination({ label, lat, lng });
             } catch {
