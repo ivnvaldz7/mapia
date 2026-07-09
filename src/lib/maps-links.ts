@@ -4,15 +4,17 @@ function latlng(d: Destination) {
   return `${d.lat},${d.lng}`
 }
 
-/** Google Maps directions URL — opens in navigation mode with waypoints */
-export function googleMapsLink({ origin, destinations }: MapLinkOptions): string {
-  const last = destinations[destinations.length - 1]
-  const waypoints = destinations.slice(1, -1).map((d) => latlng(d)).join('|')
+/** Google Maps directions URL — native /dir/ format with waypoints */
+export function googleMapsLink({ destinations }: MapLinkOptions): string {
+  // destinations includes origin as first element
+  const coords = destinations.map((d) => latlng(d))
 
-  // Manual query string — URLSearchParams encodes commas as %2C which
-  // breaks coordinate parsing in Google Maps
-  const qs = `api=1&origin=${latlng(origin)}&destination=${latlng(last)}&travelmode=driving`
-  return `https://www.google.com/maps/dir/?${qs}${waypoints ? `&waypoints=${waypoints}` : ''}`
+  // Calculate map center from all stops
+  const centerLat = destinations.reduce((s, d) => s + d.lat, 0) / destinations.length
+  const centerLng = destinations.reduce((s, d) => s + d.lng, 0) / destinations.length
+
+  // /dir/{origin}/{waypoint}/{destination}/@{center},15z
+  return `https://www.google.com/maps/dir/${coords.join('/')}/@${centerLat},${centerLng},14z/`
 }
 
 /** Waze deep link — navigates to origin (multi-stop not available via URL) */
