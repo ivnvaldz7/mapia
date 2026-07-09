@@ -35,7 +35,7 @@ export default function RoutePanel({ destinations, route, loading, onOptimize }:
       {!route && (
         <button
           disabled={loading}
-          onClick={onOptimize}
+          onClick={() => onOptimize?.()}
           className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? 'Calculando…' : 'Optimizar ruta'}

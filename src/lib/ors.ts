@@ -48,14 +48,17 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Geoc
 
   const data = await res.json()
 
-  return (data.features ?? []).map((f: Record<string, unknown>) => {
-      const [lng, lat] = (f.geometry as { coordinates: [number, number] })?.coordinates
-    return {
-      label: (f.properties as { label: string })?.label,
-      lat,
-      lng,
-    }
-  })
+  return (data.features ?? [])
+    .map((f: Record<string, unknown>) => {
+      const coords = (f.geometry as { coordinates?: [number, number] })?.coordinates
+      const [lng, lat] = coords ?? [null, null] as unknown as [number, number]
+      return {
+        label: (f.properties as { label?: string })?.label ?? '',
+        lat,
+        lng,
+      }
+    })
+    .filter((r: { label: string; lat: unknown; lng: unknown }) => r.label && typeof r.lat === 'number' && typeof r.lng === 'number')
 }
 
 export async function reverseGeocode(lat: number, lng: number): Promise<string> {
@@ -118,6 +121,9 @@ export async function getDirections(
 }
 
 export async function optimizeRoute(destinations: Destination[]): Promise<{ orderedDestinations: Destination[], directions: DirectionsResult }> {
+  if (!Array.isArray(destinations)) {
+    throw new Error('optimizeRoute: destinos inválidos')
+  }
   if (destinations.length <= 2) {
     const directions = await getDirections(destinations);
     return { orderedDestinations: destinations, directions };

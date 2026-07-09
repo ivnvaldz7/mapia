@@ -53,6 +53,10 @@ export default function App() {
       dispatch({ type: 'SET_MAX_WARN', payload: true })
       return
     }
+    if (typeof result.lat !== 'number' || typeof result.lng !== 'number') {
+      dispatch({ type: 'SET_ERROR', payload: 'El lugar seleccionado no tiene coordenadas válidas' })
+      return
+    }
     dispatch({
       type: 'ADD_DESTINATION',
       payload: {
