@@ -61,10 +61,11 @@ export default function MapView({ destinations, routeGeometry, onMapClick }: Map
     markersRef.current.forEach((m) => m.remove())
     markersRef.current = []
 
-    if (destinations.length === 0) return
+    const valid = destinations.filter((d) => d.lat != null && d.lng != null)
+    if (valid.length === 0) return
 
     // Create markers with numbered labels
-    destinations.forEach((dest, i) => {
+    valid.forEach((dest, i) => {
       const el = document.createElement('div')
       el.className =
         'flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shadow-lg border-2 border-white'
@@ -72,7 +73,7 @@ export default function MapView({ destinations, routeGeometry, onMapClick }: Map
       el.style.cursor = 'pointer'
 
       const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([dest.lng, dest.lat])
+        .setLngLat([dest.lng!, dest.lat!])
         .setPopup(new maplibregl.Popup().setText(dest.name))
         .addTo(map)
 
@@ -81,7 +82,7 @@ export default function MapView({ destinations, routeGeometry, onMapClick }: Map
 
     // Fit bounds to show all markers
     const bounds = new maplibregl.LngLatBounds()
-    destinations.forEach((d) => bounds.extend([d.lng, d.lat]))
+    valid.forEach((d) => bounds.extend([d.lng!, d.lat!]))
     map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 })
   }, [destinations])
 

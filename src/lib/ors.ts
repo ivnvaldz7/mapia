@@ -3,8 +3,8 @@ import type { Destination, DirectionsResult } from './types'
 
 export interface GeocodingResult {
   label: string
-  lat: number
-  lng: number
+  lat: number | null
+  lng: number | null
 }
 
 async function orsFetch(endpoint: string, body: unknown, signal?: AbortSignal) {
@@ -48,17 +48,17 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Geoc
 
   const data = await res.json()
 
-  return (data.features ?? [])
+  const raw: GeocodingResult[] = (data.features ?? [])
     .map((f: Record<string, unknown>) => {
       const coords = (f.geometry as { coordinates?: [number, number] })?.coordinates
-      const [lng, lat] = coords ?? [null, null] as unknown as [number, number]
+      const [lng, lat] = coords ?? [null, null]
       return {
         label: (f.properties as { label?: string })?.label ?? '',
         lat,
         lng,
       }
     })
-    .filter((r: { label: string; lat: unknown; lng: unknown }) => r.label && typeof r.lat === 'number' && typeof r.lng === 'number')
+  return raw.filter((r) => !!r.label)
 }
 
 export async function reverseGeocode(lat: number, lng: number): Promise<string> {
