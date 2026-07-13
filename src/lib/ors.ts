@@ -9,6 +9,11 @@ export interface GeocodingResult {
 
 /** Photon geocoding — free, no API key, supports street numbers in Argentina */
 const PHOTON_URL = 'https://photon.komoot.io/api/'
+const PHOTON_REVERSE_URL = 'https://photon.komoot.io/reverse'
+
+/** Buenos Aires center — used as geographic bias for search results */
+const BIAS_LAT = -34.6037
+const BIAS_LNG = -58.3816
 
 async function orsFetch(endpoint: string, body: unknown, signal?: AbortSignal) {
   const res = await fetch(`${ORS_BASE_URL}${endpoint}`, {
@@ -30,7 +35,12 @@ async function orsFetch(endpoint: string, body: unknown, signal?: AbortSignal) {
 }
 
 export async function geocode(query: string, signal?: AbortSignal): Promise<GeocodingResult[]> {
-  const params = new URLSearchParams({ q: query, limit: '5' })
+  const params = new URLSearchParams({
+    q: query,
+    limit: '5',
+    lat: String(BIAS_LAT),
+    lon: String(BIAS_LNG),
+  })
 
   const res = await fetch(`${PHOTON_URL}?${params.toString()}`, {
     method: 'GET',
@@ -45,48 +55,61 @@ export async function geocode(query: string, signal?: AbortSignal): Promise<Geoc
   const data = await res.json()
 
   return (data.features ?? [])
-    .map((f: { geometry: { coordinates: [number, number] }; properties: { name?: string; street?: string; housenumber?: string; city?: string; country?: string } }) => {
+    .map((f: { geometry: { coordinates: [number, number] }; properties: { name?: string; street?: string; housenumber?: string; city?: string; state?: string; country?: string } }) => {
       const [lng, lat] = f.geometry?.coordinates ?? [null, null]
       if (lat == null || lng == null) return null
 
       const p = f.properties
-      const parts = [p.street, p.housenumber].filter(Boolean)
-      const label = parts.length > 0 ? parts.join(' ') : p.name ?? ''
-      const city = p.city ?? ''
-      return {
-        label: city ? `${label}, ${city}` : label,
-        lat,
-        lng,
+
+      // Build primary part: prefer street+housenumber, fall back to name
+      let primary = ''
+      if (p.street) {
+        primary = p.housenumber ? `${p.street} ${p.housenumber}` : p.street
+      } else if (p.name) {
+        primary = p.name
       }
+      if (!primary) return null
+
+      // Build context: city, state
+      const context = [p.city, p.state].filter(Boolean)
+      const label = context.length > 0 ? `${primary}, ${context.join(', ')}` : primary
+
+      return { label, lat, lng }
     })
-    .filter((r: GeocodingResult | null): r is GeocodingResult => r !== null && !!r.label)
+    .filter((r: GeocodingResult | null): r is GeocodingResult => r !== null)
 }
 
 export async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  const fallback = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+
   const params = new URLSearchParams({
-    'point.lat': lat.toString(),
-    'point.lon': lng.toString(),
-    size: '1',
+    lat: lat.toString(),
+    lon: lng.toString(),
+    limit: '1',
   })
-  if (ORS_API_KEY) params.append('api_key', ORS_API_KEY)
 
-  const res = await fetch(`${ORS_BASE_URL}/geocode/reverse?${params.toString()}`, {
+  const res = await fetch(`${PHOTON_REVERSE_URL}?${params.toString()}`, {
     method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-    }
+    headers: { 'Accept': 'application/json' },
   })
 
-  if (!res.ok) {
-    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-  }
+  if (!res.ok) return fallback
 
   const data = await res.json()
-  if (data.features && data.features.length > 0) {
-    return data.features[0].properties.label || data.features[0].properties.name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+  const f = data.features?.[0]
+  if (!f) return fallback
+
+  const p = f.properties
+  let primary = ''
+  if (p.street) {
+    primary = p.housenumber ? `${p.street} ${p.housenumber}` : p.street
+  } else if (p.name) {
+    primary = p.name
   }
-  
-  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+  if (!primary) return fallback
+
+  const context = [p.city, p.state].filter(Boolean)
+  return context.length > 0 ? `${primary}, ${context.join(', ')}` : primary
 }
 
 export async function getDirections(

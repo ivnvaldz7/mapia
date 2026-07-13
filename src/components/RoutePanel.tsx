@@ -78,16 +78,42 @@ export default function RoutePanel({ destinations, route, loading, onOptimize }:
           </div>
 
           {/* Legs summary */}
-          <div className="space-y-1.5 rounded-lg bg-stone-800/50 p-3">
+          <div className="space-y-2 rounded-lg bg-stone-800/50 p-3">
             <p className="text-xs font-medium text-stone-400">Tramos</p>
             {route.legs.map((leg, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs text-stone-300">
+              <div key={i} className="flex flex-wrap items-center gap-2 text-xs text-stone-300">
                 <span className="shrink-0 text-indigo-400">{leg.from}</span>
                 <span className="text-stone-500">→</span>
                 <span className="shrink-0 text-indigo-400">{leg.to}</span>
                 <span className="ml-auto text-stone-500">
                   {formatDistance(leg.distance)}
                 </span>
+                
+                {/* Individual navigation buttons per leg */}
+                <div className="flex gap-1 pl-2">
+                  <a
+                    href={googleMapsLink({ destinations: [route.orderedDestinations[i], route.orderedDestinations[i + 1]] })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center rounded bg-blue-600/20 p-1.5 text-blue-400 hover:bg-blue-600/40 hover:text-white transition-colors"
+                    title="Navegar tramo con Google Maps"
+                  >
+                    <svg className="size-3" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+                    </svg>
+                  </a>
+                  <a
+                    href={wazeLink({ destinations: [route.orderedDestinations[i + 1]] })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center rounded bg-sky-600/20 p-1.5 text-sky-400 hover:bg-sky-600/40 hover:text-white transition-colors"
+                    title="Navegar tramo con Waze"
+                  >
+                    <svg className="size-3" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.44 2H6.56C3.99 2 2 3.99 2 6.56v10.88C2 20.01 3.99 22 6.56 22h10.88c2.57 0 4.56-1.99 4.56-4.56V6.56C22 3.99 20.01 2 17.44 2zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7zm0-12c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5z" />
+                    </svg>
+                  </a>
+                </div>
               </div>
             ))}
           </div>
@@ -96,7 +122,6 @@ export default function RoutePanel({ destinations, route, loading, onOptimize }:
           <div className="flex gap-2">
             <a
               href={googleMapsLink({
-                origin: route.orderedDestinations[0],
                 destinations: route.orderedDestinations,
               })}
               target="_blank"
@@ -110,7 +135,6 @@ export default function RoutePanel({ destinations, route, loading, onOptimize }:
             </a>
             <a
               href={wazeLink({
-                origin: route.orderedDestinations[0],
                 destinations: route.orderedDestinations,
               })}
               target="_blank"

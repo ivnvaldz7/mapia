@@ -1,0 +1,20 @@
+schema: spec-driven
+
+context: |
+  Tech stack: React 19, TypeScript, Vite, Tailwind CSS 4, MapLibre GL JS
+  Architecture: SPA
+  Testing: None
+  Style: TypeScript
+
+strict_tdd: false
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules/packages
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+
+testing:
+  runner: false

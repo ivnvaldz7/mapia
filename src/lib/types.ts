@@ -29,6 +29,5 @@ export interface DirectionsResult {
 }
 
 export interface MapLinkOptions {
-  origin: Destination
-  destinations: Destination[] // in optimized order
+  destinations: Destination[] // in optimized order (first = origin)
 }

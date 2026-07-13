@@ -26,6 +26,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
   const search = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
       setSuggestions([])
+      setSearched(false)
       return
     }
 
@@ -34,6 +35,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
     abortRef.current = controller
 
     setLoading(true)
+    setSearched(false)
     try {
       const results = await geocode(q, controller.signal)
       setSuggestions(results)
