@@ -4,6 +4,7 @@ import SearchBar from './components/SearchBar'
 import DestinationList from './components/DestinationList'
 import RoutePanel from './components/RoutePanel'
 import { optimizeRoute, getDirections, reverseGeocode } from './lib/ors'
+import { googleMapsLink } from './lib/maps-links'
 import { estimateFuelConsumption } from './lib/fuel'
 import { MAX_DESTINATIONS, ORS_API_KEY } from './lib/constants'
 import { reducer, initialState } from './lib/reducer'
@@ -40,7 +41,7 @@ let nextId = 1
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [showMissingKeyBanner, setShowMissingKeyBanner] = useState(() => !ORS_API_KEY)
-  const [focusCoord, setFocusCoord] = useState<{ lat: number; lng: number } | null>(null)
+  const [focusedId, setFocusedId] = useState<string | null>(null)
   const directionsAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -58,15 +59,17 @@ export default function App() {
       dispatch({ type: 'SET_ERROR', payload: `"${result.label}" no tiene coordenadas disponibles. Probá con un lugar más específico.` })
       return
     }
+    const newId = String(nextId++)
     dispatch({
       type: 'ADD_DESTINATION',
       payload: {
-        id: String(nextId++),
+        id: newId,
         name: result.label,
         lat: result.lat,
         lng: result.lng,
       },
     })
+    setFocusedId(newId)
   }, [state.destinations.length])
 
   const handleOptimize = useCallback(async (dests?: Destination[]) => {
@@ -76,9 +79,31 @@ export default function App() {
     dispatch({ type: 'SET_ROUTE', payload: null })
 
     try {
-      const { orderedDestinations, directions } = await optimizeRoute(targets)
-      dispatch({ type: 'SET_ROUTE', payload: createRouteResult(orderedDestinations, directions) })
-      dispatch({ type: 'SET_DESTINATIONS', payload: orderedDestinations })
+      const pinned = targets.filter(d => d.isPinned)
+      const unpinned = targets.filter(d => !d.isPinned)
+
+      let finalOrderedDestinations: Destination[] = []
+      let finalDirections: DirectionsResult | null = null
+
+      if (unpinned.length === 0) {
+        finalOrderedDestinations = pinned
+        finalDirections = await getDirections(pinned)
+      } else if (pinned.length === 0) {
+        const { orderedDestinations, directions } = await optimizeRoute(unpinned)
+        finalOrderedDestinations = orderedDestinations
+        finalDirections = directions
+      } else {
+        const toOptimize = [pinned[pinned.length - 1], ...unpinned]
+        const { orderedDestinations } = await optimizeRoute(toOptimize)
+        finalOrderedDestinations = [
+          ...pinned.slice(0, -1),
+          ...orderedDestinations
+        ]
+        finalDirections = await getDirections(finalOrderedDestinations)
+      }
+
+      dispatch({ type: 'SET_DESTINATIONS', payload: finalOrderedDestinations })
+      dispatch({ type: 'SET_ROUTE', payload: createRouteResult(finalOrderedDestinations, finalDirections) })
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       console.error('Route optimization failed:', err)
@@ -92,6 +117,7 @@ export default function App() {
   const removeDestination = useCallback((id: string) => {
     const remaining = state.destinations.filter((d) => d.id !== id)
     dispatch({ type: 'SET_DESTINATIONS', payload: remaining })
+    if (focusedId === id) setFocusedId(null)
 
     if (!state.route || remaining.length < 2) {
       dispatch({ type: 'SET_ROUTE', payload: null })
@@ -99,7 +125,7 @@ export default function App() {
     }
 
     handleOptimize(remaining)
-  }, [state.destinations, state.route, handleOptimize])
+  }, [state.destinations, state.route, handleOptimize, focusedId])
 
   const handleReorderDirections = useCallback(async (dests: Destination[]) => {
     directionsAbortRef.current?.abort()
@@ -131,13 +157,57 @@ export default function App() {
     }
   }, [state.destinations, state.route, handleReorderDirections])
 
+  // Parse shared URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const shared = params.get('d')
+    if (shared) {
+      try {
+        const dests = shared.split('|').map(s => {
+          const [lat, lng, ...nameParts] = s.split(',')
+          return {
+            id: String(nextId++),
+            lat: parseFloat(lat),
+            lng: parseFloat(lng),
+            name: decodeURIComponent(nameParts.join(',')),
+          }
+        }).filter(d => !isNaN(d.lat) && !isNaN(d.lng))
+        
+        if (dests.length > 0) {
+          dispatch({ type: 'SET_DESTINATIONS', payload: dests })
+          if (dests.length >= 2) {
+            handleOptimize(dests)
+          }
+        }
+        window.history.replaceState({}, '', window.location.pathname)
+      } catch (e) {
+        console.error('Failed to parse shared route', e)
+      }
+    }
+  }, [handleOptimize])
+
+  const shareAppUrl = useCallback(() => {
+    if (!state.route || state.route.orderedDestinations.length === 0) return
+    const url = googleMapsLink({ destinations: state.route.orderedDestinations })
+    
+    if (navigator.share) {
+      navigator.share({
+        title: 'Ruta en Google Maps',
+        url,
+      }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(url)
+      alert('Enlace de Google Maps copiado al portapapeles')
+    }
+  }, [state.route])
+
   return (
     <div className="flex h-svh w-svw flex-col bg-stone-900 text-white md:flex-row">
       {/* Sidebar */}
       <aside className="flex w-full flex-col overflow-y-auto border-stone-700 bg-stone-900 md:w-96 md:border-r">
         {/* Header */}
         <header className="border-b border-stone-700">
-          <div className="p-4">
+          <div className="p-4 flex items-center justify-between">
             <h1 className="text-lg font-bold tracking-tight">
               mapia{' '}
               <span className="text-xs font-normal text-stone-500">
@@ -179,7 +249,9 @@ export default function App() {
             destinations={state.destinations}
             onRemove={removeDestination}
             onReorder={reorderDestinations}
-            onFocus={(d) => setFocusCoord({ lat: d.lat, lng: d.lng })}
+            onFocus={(d) => setFocusedId(d.id)}
+            onTogglePin={(id) => dispatch({ type: 'TOGGLE_PIN', payload: id })}
+            focusedId={focusedId}
             maxWarn={state.maxWarn}
           />
         </div>
@@ -200,12 +272,20 @@ export default function App() {
               </button>
             </div>
           )}
-          <RoutePanel
-            destinations={state.destinations}
-            route={state.route}
-            loading={state.loading}
-            onOptimize={!state.route ? handleOptimize : undefined}
-          />
+          {!state.route && (
+            <RoutePanel
+              destinations={state.destinations}
+              loading={state.loading}
+              onOptimize={() => handleOptimize()}
+            />
+          )}
+          {state.route && (
+            <RoutePanel
+              route={state.route}
+              onReset={() => dispatch({ type: 'RESET' })}
+              onShare={shareAppUrl}
+            />
+          )}
         </div>
       </aside>
 
@@ -213,13 +293,14 @@ export default function App() {
         <MapView
           destinations={state.route?.orderedDestinations ?? state.destinations}
           routeGeometry={state.route?.geometry ?? null}
-          focusCoord={focusCoord}
+          focusedId={focusedId}
+          onMarkerClick={setFocusedId}
           onMapClick={async (lat, lng) => {
             try {
               const label = await reverseGeocode(lat, lng);
               addDestination({ label, lat, lng });
-            } catch {
-              addDestination({ label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng });
+            } catch (err) {
+              dispatch({ type: 'SET_ERROR', payload: `No se pudo encontrar dirección: ${err}` });
             }
           }}
         />

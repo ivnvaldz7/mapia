@@ -3,6 +3,7 @@ export interface Destination {
   name: string
   lat: number
   lng: number
+  isPinned?: boolean
 }
 
 export interface RouteResult {
@@ -29,5 +30,8 @@ export interface DirectionsResult {
 }
 
 export interface MapLinkOptions {
-  destinations: Destination[] // in optimized order (first = origin)
+  destinations: Destination[]
+  /** When true (default), omits origin so Google Maps uses GPS location.
+   *  When false, uses destinations[0] as explicit origin + dir_action=navigate. */
+  useGpsOrigin?: boolean
 }

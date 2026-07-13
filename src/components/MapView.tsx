@@ -6,14 +6,16 @@ import type { Destination } from '../lib/types'
 interface MapViewProps {
   destinations: Destination[]
   routeGeometry: GeoJSON.LineString | null
-  focusCoord: { lat: number; lng: number } | null
+  focusedId: string | null
   onMapClick?: (lat: number, lng: number) => void
+  onMarkerClick?: (id: string) => void
 }
 
-export default function MapView({ destinations, routeGeometry, focusCoord, onMapClick }: MapViewProps) {
+export default function MapView({ destinations, routeGeometry, focusedId, onMapClick, onMarkerClick }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MaplibreMap | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
+  const lastInteraction = useRef<'map'|'list'>('list')
 
   // Initialize map once
   useEffect(() => {
@@ -40,12 +42,17 @@ export default function MapView({ destinations, routeGeometry, focusCoord, onMap
     }
   }, [])
 
-  // Re-register click handler when onMapClick changes (avoids stale closure)
+  // Re-register click handler when onMapClick changes
   useEffect(() => {
     const map = mapRef.current
     if (!map || !onMapClick) return
 
     const handler = (e: maplibregl.MapMouseEvent) => {
+      // Ignore click if it originated from a marker
+      const target = e.originalEvent.target as HTMLElement
+      if (target.closest('.maplibregl-marker') || target.closest('.maplibregl-marker-custom') || target.dataset.id) {
+        return
+      }
       onMapClick(e.lngLat.lat, e.lngLat.lng)
     }
 
@@ -68,24 +75,35 @@ export default function MapView({ destinations, routeGeometry, focusCoord, onMap
     // Create markers with numbered labels
     valid.forEach((dest, i) => {
       const el = document.createElement('div')
+      el.dataset.id = dest.id
       el.className =
-        'flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shadow-lg border-2 border-white'
+        'flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shadow-lg border-2 border-white transition-all duration-300 maplibregl-marker-custom'
       el.textContent = `${i + 1}`
       el.style.cursor = 'pointer'
+      
+      el.onclick = (e) => {
+        e.stopPropagation()
+        e.preventDefault()
+        lastInteraction.current = 'map'
+        if (onMarkerClick) onMarkerClick(dest.id)
+      }
 
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([dest.lng!, dest.lat!])
-        .setPopup(new maplibregl.Popup().setText(dest.name))
         .addTo(map)
 
       markersRef.current.push(marker)
     })
 
-    // Fit bounds to show all markers
-    const bounds = new maplibregl.LngLatBounds()
-    valid.forEach((d) => bounds.extend([d.lng!, d.lat!]))
-    map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 })
-  }, [destinations])
+    // Fit bounds to show all markers (or flyTo if only one)
+    if (valid.length === 1) {
+      map.flyTo({ center: [valid[0].lng!, valid[0].lat!], zoom: 15, duration: 600 })
+    } else {
+      const bounds = new maplibregl.LngLatBounds()
+      valid.forEach((d) => bounds.extend([d.lng!, d.lat!]))
+      map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 })
+    }
+  }, [destinations, onMarkerClick])
 
   // Update route polyline
   useEffect(() => {
@@ -95,7 +113,6 @@ export default function MapView({ destinations, routeGeometry, focusCoord, onMap
     const sourceId = 'route-line'
     const layerId = 'route-line-layer'
 
-    // Clean up existing
     if (map.getLayer(layerId)) map.removeLayer(layerId)
     if (map.getSource(sourceId)) map.removeSource(sourceId)
 
@@ -122,12 +139,33 @@ export default function MapView({ destinations, routeGeometry, focusCoord, onMap
     })
   }, [routeGeometry])
 
-  // Fly to focused coordinate when a destination is clicked in the list
+  // Fly to focused coordinate and animate marker when a destination is clicked in the list
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !focusCoord) return
-    map.flyTo({ center: [focusCoord.lng, focusCoord.lat], zoom: 16, duration: 800 })
-  }, [focusCoord])
+    if (!map) return
+
+    const targetDest = destinations.find(d => d.id === focusedId)
+    
+    // Only fly if the interaction came from the sidebar/list
+    if (lastInteraction.current !== 'map' && targetDest && targetDest.lat != null && targetDest.lng != null) {
+      map.flyTo({ center: [targetDest.lng, targetDest.lat], zoom: 16, duration: 800 })
+    }
+    
+    // Reset for next time
+    lastInteraction.current = 'list'
+
+    // Toggle animation classes on marker elements
+    markersRef.current.forEach((marker) => {
+      const el = marker.getElement()
+      if (el.dataset.id === focusedId) {
+        el.classList.remove('bg-indigo-600')
+        el.classList.add('animate-bounce', 'bg-amber-500', 'ring-4', 'ring-amber-400/50', 'scale-125', 'z-10')
+      } else {
+        el.classList.remove('animate-bounce', 'bg-amber-500', 'ring-4', 'ring-amber-400/50', 'scale-125', 'z-10')
+        el.classList.add('bg-indigo-600')
+      }
+    })
+  }, [focusedId, destinations])
 
   return <div ref={containerRef} className="h-full w-full" />
 }

@@ -5,12 +5,20 @@ function latlng(d: Destination) {
 }
 
 /**
- * Google Maps directions URL — explicit origin with dir_action=navigate.
- * If the user is physically at the origin, it triggers the "Iniciar" button.
- * If not, it shows a preview from that origin.
+ * Google Maps directions URL.
+ *
+ * - useGpsOrigin=true (default): omits the origin so Google Maps uses the
+ *   device's GPS location. All destinations are sent as waypoints + destination.
+ *   Best for the full-route button — navigation goes GPS → stop 1 → … → final.
+ *
+ * - useGpsOrigin=false: sets destinations[0] as explicit origin with
+ *   dir_action=navigate for immediate turn-by-turn. Best for point-to-point
+ *   leg navigation (e.g. "from stop A to stop B").
  */
-export function googleMapsLink({ destinations }: MapLinkOptions): string {
+export function googleMapsLink({ destinations, useGpsOrigin = true }: MapLinkOptions): string {
   if (destinations.length < 1) return 'https://www.google.com/maps'
+
+  // Single destination — always navigate directly
   if (destinations.length === 1) {
     const params = new URLSearchParams()
     params.set('api', '1')
@@ -20,19 +28,29 @@ export function googleMapsLink({ destinations }: MapLinkOptions): string {
     return `https://www.google.com/maps/dir/?${params.toString()}`
   }
 
-  const origin = destinations[0]
-  const lastStop = destinations[destinations.length - 1]
-  const waypoints = destinations.slice(1, -1)
-
   const params = new URLSearchParams()
   params.set('api', '1')
-  params.set('origin', latlng(origin))
-  params.set('destination', latlng(lastStop))
   params.set('travelmode', 'driving')
-  params.set('dir_action', 'navigate')
 
-  if (waypoints.length > 0) {
-    params.set('waypoints', waypoints.map(latlng).join('|'))
+  if (useGpsOrigin) {
+    // GPS origin — all dests as waypoints + final destination
+    const lastStop = destinations[destinations.length - 1]
+    const waypoints = destinations.slice(0, -1)
+    params.set('destination', latlng(lastStop))
+    if (waypoints.length > 0) {
+      params.set('waypoints', waypoints.map(latlng).join('|'))
+    }
+  } else {
+    // Explicit origin + dir_action=navigate for point-to-point navigation
+    const origin = destinations[0]
+    const destination = destinations[destinations.length - 1]
+    params.set('origin', latlng(origin))
+    params.set('destination', latlng(destination))
+    params.set('dir_action', 'navigate')
+    if (destinations.length > 2) {
+      const waypoints = destinations.slice(1, -1)
+      params.set('waypoints', waypoints.map(latlng).join('|'))
+    }
   }
 
   return `https://www.google.com/maps/dir/?${params.toString()}`

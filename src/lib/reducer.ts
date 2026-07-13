@@ -16,6 +16,8 @@ export type AppAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   | { type: 'SET_MAX_WARN'; payload: boolean }
+  | { type: 'RESET' }
+  | { type: 'TOGGLE_PIN'; payload: string }
 
 export const initialState: AppState = {
   destinations: [],
@@ -28,7 +30,7 @@ export const initialState: AppState = {
 export function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'ADD_DESTINATION':
-      return { ...state, destinations: [...state.destinations, action.payload], route: null }
+      return { ...state, destinations: [...state.destinations, action.payload] }
     case 'REMOVE_DESTINATION':
       return { ...state, destinations: state.destinations.filter((d) => d.id !== action.payload) }
     case 'SET_DESTINATIONS':
@@ -41,5 +43,14 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, errorMsg: action.payload }
     case 'SET_MAX_WARN':
       return { ...state, maxWarn: action.payload }
+    case 'TOGGLE_PIN':
+      return {
+        ...state,
+        destinations: state.destinations.map(d =>
+          d.id === action.payload ? { ...d, isPinned: !d.isPinned } : d
+        ),
+      }
+    case 'RESET':
+      return initialState
   }
 }
