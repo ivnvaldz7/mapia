@@ -95,10 +95,10 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
       markersRef.current.push(marker)
     })
 
-    // Fit bounds to show all markers (or flyTo if only one)
-    if (valid.length === 1) {
-      map.flyTo({ center: [valid[0].lng!, valid[0].lat!], zoom: 15, duration: 600 })
-    } else {
+    // Camera: fitBounds for 2+ destinations so all pins are visible.
+    // For 1 destination the focus effect handles camera movement when needed
+    // (SearchBar additions) or skips it (map click additions — user is already there).
+    if (valid.length >= 2) {
       const bounds = new maplibregl.LngLatBounds()
       valid.forEach((d) => bounds.extend([d.lng!, d.lat!]))
       map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 })

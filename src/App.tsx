@@ -50,7 +50,7 @@ export default function App() {
     return () => clearTimeout(t)
   }, [state.maxWarn])
 
-  const addDestination = useCallback((result: GeocodingResult) => {
+  const addDestination = useCallback((result: GeocodingResult, focus = true) => {
     if (state.destinations.length >= MAX_DESTINATIONS) {
       dispatch({ type: 'SET_MAX_WARN', payload: true })
       return
@@ -69,7 +69,7 @@ export default function App() {
         lng: result.lng,
       },
     })
-    setFocusedId(newId)
+    if (focus) setFocusedId(newId)
   }, [state.destinations.length])
 
   const handleOptimize = useCallback(async (dests?: Destination[]) => {
@@ -298,7 +298,7 @@ export default function App() {
           onMapClick={async (lat, lng) => {
             try {
               const label = await reverseGeocode(lat, lng);
-              addDestination({ label, lat, lng });
+              addDestination({ label, lat, lng }, false);
             } catch (err) {
               dispatch({ type: 'SET_ERROR', payload: `No se pudo encontrar dirección: ${err}` });
             }
