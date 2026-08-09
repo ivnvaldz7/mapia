@@ -54,6 +54,7 @@ export default function App() {
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)
   const directionsAbortRef = useRef<AbortController | null>(null)
   const optimizeAbortRef = useRef<AbortController | null>(null)
+  const mapClickQueue = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => {
     if (!state.maxWarn) return
@@ -327,13 +328,16 @@ export default function App() {
           routeGeometry={state.route?.geometry ?? null}
           focusedId={focusedId}
           onMarkerClick={setFocusedId}
-          onMapClick={async (lat, lng) => {
-            try {
-              const label = await reverseGeocode(lat, lng);
-              addDestination({ label, lat, lng }, false);
-            } catch (err) {
-              dispatch({ type: 'SET_ERROR', payload: `No se pudo encontrar dirección: ${err}` });
-            }
+          onMapClick={(lat, lng) => {
+            mapClickQueue.current = mapClickQueue.current.then(async () => {
+              try {
+                const label = await reverseGeocode(lat, lng);
+                addDestination({ label, lat, lng }, false);
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err)
+                dispatch({ type: 'SET_ERROR', payload: `No se pudo encontrar dirección: ${msg}` });
+              }
+            })
           }}
         />
       </main>

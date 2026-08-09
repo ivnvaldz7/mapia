@@ -41,13 +41,14 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
       setSuggestions(results)
       setOpen(results.length > 0)
       setError(null)
+      setSearched(true)
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       setSuggestions([])
       setError(err instanceof Error ? err.message : 'Error al buscar')
-    } finally {
-      setLoading(false)
       setSearched(true)
+    } finally {
+      if (!controller.signal.aborted) setLoading(false)
     }
   }, [])
 

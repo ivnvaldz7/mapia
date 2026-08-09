@@ -16,6 +16,7 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
   const mapRef = useRef<MaplibreMap | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
   const lastInteraction = useRef<'map'|'list'>('list')
+  const prevFocusedId = useRef<string | null>(null)
 
   // Initialize map once
   useEffect(() => {
@@ -110,33 +111,42 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
     const map = mapRef.current
     if (!map) return
 
-    const sourceId = 'route-line'
-    const layerId = 'route-line-layer'
+    const apply = () => {
+      const sourceId = 'route-line'
+      const layerId = 'route-line-layer'
 
-    if (map.getLayer(layerId)) map.removeLayer(layerId)
-    if (map.getSource(sourceId)) map.removeSource(sourceId)
+      if (map.getLayer(layerId)) map.removeLayer(layerId)
+      if (map.getSource(sourceId)) map.removeSource(sourceId)
 
-    if (!routeGeometry) return
+      if (!routeGeometry) return
 
-    map.addSource(sourceId, {
-      type: 'geojson',
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: routeGeometry,
-      },
-    })
+      map.addSource(sourceId, {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: routeGeometry,
+        },
+      })
 
-    map.addLayer({
-      id: layerId,
-      type: 'line',
-      source: sourceId,
-      paint: {
-        'line-color': '#4f46e5',
-        'line-width': 4,
-        'line-opacity': 0.8,
-      },
-    })
+      map.addLayer({
+        id: layerId,
+        type: 'line',
+        source: sourceId,
+        paint: {
+          'line-color': '#4f46e5',
+          'line-width': 4,
+          'line-opacity': 0.8,
+        },
+      })
+    }
+
+    if (map.isStyleLoaded()) {
+      apply()
+    } else {
+      map.once('load', apply)
+      return () => { map.off('load', apply) }
+    }
   }, [routeGeometry])
 
   // Fly to focused coordinate and animate marker when a destination is clicked in the list
@@ -145,9 +155,12 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
     if (!map) return
 
     const targetDest = destinations.find(d => d.id === focusedId)
-    
-    // Only fly if the interaction came from the sidebar/list
-    if (lastInteraction.current !== 'map' && targetDest && targetDest.lat != null && targetDest.lng != null) {
+
+    const focusChanged = focusedId !== prevFocusedId.current
+    prevFocusedId.current = focusedId
+
+    // Only fly if the interaction came from the sidebar/list and focus actually changed
+    if (focusChanged && lastInteraction.current !== 'map' && targetDest && targetDest.lat != null && targetDest.lng != null) {
       map.flyTo({ center: [targetDest.lng, targetDest.lat], zoom: 16, duration: 800 })
     }
     
