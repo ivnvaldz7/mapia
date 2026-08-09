@@ -1,8 +1,9 @@
-import { type DragEndEvent, DndContext, closestCenter } from '@dnd-kit/core'
+import { type DragEndEvent, DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import {
   SortableContext,
   verticalListSortingStrategy,
   useSortable,
+  sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Destination } from '../lib/types'
@@ -85,6 +86,7 @@ function SortableItem({
           }}
           className={`shrink-0 rounded p-1.5 transition-colors ${dest.isPinned ? 'bg-amber-600/20 text-amber-500 hover:bg-amber-600 hover:text-white' : 'text-stone-500 hover:bg-stone-700 hover:text-stone-300'}`}
           title={dest.isPinned ? "Desfijar (Permitir optimizar)" : "Fijar al inicio (No cambiar de lugar)"}
+          aria-label={dest.isPinned ? `Desfijar ${dest.name}` : `Fijar ${dest.name}`}
         >
           <svg className="size-4" fill={dest.isPinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -97,6 +99,7 @@ function SortableItem({
           }}
           className="shrink-0 rounded p-1.5 text-stone-500 transition-colors hover:bg-red-600 hover:text-white"
           title="Eliminar"
+          aria-label={`Eliminar ${dest.name}`}
         >
           <svg className="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -116,6 +119,11 @@ export default function DestinationList({
   focusedId,
   maxWarn,
 }: DestinationListProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
   if (destinations.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-stone-500">
@@ -142,7 +150,7 @@ export default function DestinationList({
           Máximo de {destinations.length} destinos alcanzado
         </p>
       )}
-      <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext
           items={destinations.map((d) => d.id)}
           strategy={verticalListSortingStrategy}

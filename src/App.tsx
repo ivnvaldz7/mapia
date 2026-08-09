@@ -253,6 +253,7 @@ export default function App() {
                 onClick={() => setShowMissingKeyBanner(false)}
                 className="shrink-0 rounded p-0.5 text-amber-300 transition-colors hover:text-amber-100"
                 title="Descartar"
+                aria-label="Descartar aviso de API key"
               >
                 <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -297,6 +298,7 @@ export default function App() {
                 onClick={() => dispatch({ type: 'SET_ERROR', payload: null })}
                 className="shrink-0 rounded p-0.5 text-red-400 transition-colors hover:text-red-200"
                 title="Descartar"
+                aria-label="Descartar mensaje de error"
               >
                 <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

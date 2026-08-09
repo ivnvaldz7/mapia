@@ -73,6 +73,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
         <input
           type="text"
           placeholder="Buscar destino…"
+          aria-label="Buscar destino"
           value={query}
           onChange={(e) => handleChange(e.target.value)}
           onFocus={() => suggestions.length > 0 && setOpen(true)}
