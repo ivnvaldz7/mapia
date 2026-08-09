@@ -144,12 +144,12 @@ export async function getDirections(
   }
 }
 
-export async function optimizeRoute(destinations: Destination[]): Promise<{ orderedDestinations: Destination[], directions: DirectionsResult }> {
+export async function optimizeRoute(destinations: Destination[], signal?: AbortSignal): Promise<{ orderedDestinations: Destination[], directions: DirectionsResult }> {
   if (!Array.isArray(destinations)) {
     throw new Error('optimizeRoute: destinos inválidos')
   }
   if (destinations.length <= 2) {
-    const directions = await getDirections(destinations);
+    const directions = await getDirections(destinations, signal);
     return { orderedDestinations: destinations, directions };
   }
 
@@ -164,22 +164,26 @@ export async function optimizeRoute(destinations: Destination[]): Promise<{ orde
     start: [destinations[0].lng, destinations[0].lat]
   }];
 
-  const data = await orsFetch('/optimization', { jobs, vehicles });
-  
+  const data = await orsFetch('/optimization', { jobs, vehicles }, signal);
+
   if (data.code !== 0) {
     throw new Error(data.error || 'Error en la optimización de ruta')
   }
 
+  const steps = data.routes?.[0]?.steps
+  if (!Array.isArray(steps)) {
+    throw new Error('La optimización no devolvió una ruta válida')
+  }
+
   const optimizedDestinations: Destination[] = [destinations[0]];
-  const steps = data.routes[0].steps;
-  
+
   for (const step of steps) {
     if (step.type === 'job') {
       optimizedDestinations.push(destinations[step.job]);
     }
   }
 
-  const directions = await getDirections(optimizedDestinations);
+  const directions = await getDirections(optimizedDestinations, signal);
 
   return { orderedDestinations: optimizedDestinations, directions };
 }

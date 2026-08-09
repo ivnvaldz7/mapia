@@ -4,7 +4,6 @@ import SearchBar from './components/SearchBar'
 import DestinationList from './components/DestinationList'
 import RoutePanel from './components/RoutePanel'
 import { optimizeRoute, getDirections, reverseGeocode } from './lib/ors'
-import { googleMapsLink } from './lib/maps-links'
 import { estimateFuelConsumption } from './lib/fuel'
 import { MAX_DESTINATIONS, ORS_API_KEY } from './lib/constants'
 import { reducer, initialState } from './lib/reducer'
@@ -38,11 +37,23 @@ function createRouteResult(ordered: Destination[], dir: DirectionsResult): Route
 
 let nextId = 1
 
+function buildShareUrl(destinations: Destination[]): string {
+  const encoded = destinations
+    .map((d) => `${d.lat},${d.lng},${encodeURIComponent(d.name)}`)
+    .join('|')
+  const url = new URL(window.location.href)
+  url.search = ''
+  url.searchParams.set('d', encoded)
+  return url.toString()
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [showMissingKeyBanner, setShowMissingKeyBanner] = useState(() => !ORS_API_KEY)
   const [focusedId, setFocusedId] = useState<string | null>(null)
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null)
   const directionsAbortRef = useRef<AbortController | null>(null)
+  const optimizeAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!state.maxWarn) return
@@ -69,12 +80,18 @@ export default function App() {
         lng: result.lng,
       },
     })
+    if (state.route) dispatch({ type: 'SET_ROUTE', payload: null })
     if (focus) setFocusedId(newId)
-  }, [state.destinations.length])
+  }, [state.destinations.length, state.route])
 
   const handleOptimize = useCallback(async (dests?: Destination[]) => {
     const targets = dests ?? state.destinations
     if (targets.length < 2) return
+
+    optimizeAbortRef.current?.abort()
+    const controller = new AbortController()
+    optimizeAbortRef.current = controller
+
     dispatch({ type: 'SET_LOADING', payload: true })
     dispatch({ type: 'SET_ROUTE', payload: null })
 
@@ -87,19 +104,19 @@ export default function App() {
 
       if (unpinned.length === 0) {
         finalOrderedDestinations = pinned
-        finalDirections = await getDirections(pinned)
+        finalDirections = await getDirections(pinned, controller.signal)
       } else if (pinned.length === 0) {
-        const { orderedDestinations, directions } = await optimizeRoute(unpinned)
+        const { orderedDestinations, directions } = await optimizeRoute(unpinned, controller.signal)
         finalOrderedDestinations = orderedDestinations
         finalDirections = directions
       } else {
         const toOptimize = [pinned[pinned.length - 1], ...unpinned]
-        const { orderedDestinations } = await optimizeRoute(toOptimize)
+        const { orderedDestinations } = await optimizeRoute(toOptimize, controller.signal)
         finalOrderedDestinations = [
           ...pinned.slice(0, -1),
           ...orderedDestinations
         ]
-        finalDirections = await getDirections(finalOrderedDestinations)
+        finalDirections = await getDirections(finalOrderedDestinations, controller.signal)
       }
 
       dispatch({ type: 'SET_DESTINATIONS', payload: finalOrderedDestinations })
@@ -110,7 +127,9 @@ export default function App() {
       const msg = err instanceof Error ? err.message : String(err)
       dispatch({ type: 'SET_ERROR', payload: `Error al optimizar la ruta: ${msg}` })
     } finally {
-      dispatch({ type: 'SET_LOADING', payload: false })
+      if (!controller.signal.aborted) {
+        dispatch({ type: 'SET_LOADING', payload: false })
+      }
     }
   }, [state.destinations])
 
@@ -142,7 +161,9 @@ export default function App() {
       dispatch({ type: 'SET_ERROR', payload: msg })
       dispatch({ type: 'SET_ROUTE', payload: null })
     } finally {
-      dispatch({ type: 'SET_LOADING', payload: false })
+      if (!controller.signal.aborted) {
+        dispatch({ type: 'SET_LOADING', payload: false })
+      }
     }
   }, [])
 
@@ -188,16 +209,23 @@ export default function App() {
 
   const shareAppUrl = useCallback(() => {
     if (!state.route || state.route.orderedDestinations.length === 0) return
-    const url = googleMapsLink({ destinations: state.route.orderedDestinations })
-    
+    const url = buildShareUrl(state.route.orderedDestinations)
+
     if (navigator.share) {
       navigator.share({
-        title: 'Ruta en Google Maps',
+        title: 'mapia — ruta optimizada',
         url,
       }).catch(() => {})
     } else {
       navigator.clipboard.writeText(url)
-      alert('Enlace de Google Maps copiado al portapapeles')
+        .then(() => {
+          setShareFeedback('Enlace copiado al portapapeles')
+          setTimeout(() => setShareFeedback(null), 3000)
+        })
+        .catch(() => {
+          setShareFeedback('No se pudo copiar el enlace')
+          setTimeout(() => setShareFeedback(null), 3000)
+        })
     }
   }, [state.route])
 
@@ -250,7 +278,10 @@ export default function App() {
             onRemove={removeDestination}
             onReorder={reorderDestinations}
             onFocus={(d) => setFocusedId(d.id)}
-            onTogglePin={(id) => dispatch({ type: 'TOGGLE_PIN', payload: id })}
+            onTogglePin={(id) => {
+              dispatch({ type: 'TOGGLE_PIN', payload: id })
+              if (state.route) dispatch({ type: 'SET_ROUTE', payload: null })
+            }}
             focusedId={focusedId}
             maxWarn={state.maxWarn}
           />
@@ -284,6 +315,7 @@ export default function App() {
               route={state.route}
               onReset={() => dispatch({ type: 'RESET' })}
               onShare={shareAppUrl}
+              shareFeedback={shareFeedback}
             />
           )}
         </div>

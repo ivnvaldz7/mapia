@@ -8,6 +8,7 @@ interface RoutePanelProps {
   onOptimize?: () => void
   onShare?: () => void
   onReset?: () => void
+  shareFeedback?: string | null
 }
 
 function formatDistance(m: number): string {
@@ -22,7 +23,7 @@ function formatDuration(s: number): string {
   return `${m} min`
 }
 
-export default function RoutePanel({ destinations, route, loading, onOptimize, onShare, onReset }: RoutePanelProps) {
+export default function RoutePanel({ destinations, route, loading, onOptimize, onShare, onReset, shareFeedback }: RoutePanelProps) {
   if (!route) {
     const ready = destinations && destinations.length >= 2
     return (
@@ -172,6 +173,9 @@ export default function RoutePanel({ destinations, route, loading, onOptimize, o
             </svg>
             Compartir Enlace
           </button>
+          {shareFeedback && (
+            <p className="text-center text-xs text-emerald-400">{shareFeedback}</p>
+          )}
           <button
             onClick={onReset}
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-stone-600 bg-transparent py-2.5 text-sm font-medium text-stone-300 transition-all hover:bg-stone-800 hover:text-white active:scale-[0.98]"
