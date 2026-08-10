@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import maplibregl, { type Map as MaplibreMap } from 'maplibre-gl'
 import { MAP_STYLE, DEFAULT_CENTER, DEFAULT_ZOOM } from '../lib/constants'
 import type { Destination } from '../lib/types'
@@ -9,14 +9,17 @@ interface MapViewProps {
   focusedId: string | null
   onMapClick?: (lat: number, lng: number) => void
   onMarkerClick?: (id: string) => void
+  focusRequest: number
 }
 
-export default function MapView({ destinations, routeGeometry, focusedId, onMapClick, onMarkerClick }: MapViewProps) {
+export default function MapView({ destinations, routeGeometry, focusedId, focusRequest, onMapClick, onMarkerClick }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MaplibreMap | null>(null)
   const markersRef = useRef<maplibregl.Marker[]>([])
   const lastInteraction = useRef<'map'|'list'>('list')
   const prevFocusedId = useRef<string | null>(null)
+  const prevFocusRequest = useRef(0)
+  const [mapReady, setMapReady] = useState(false)
 
   // Initialize map once
   useEffect(() => {
@@ -33,6 +36,7 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
 
     map.on('load', () => {
       map.resize()
+      setMapReady(true)
     })
 
     mapRef.current = map
@@ -40,6 +44,7 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
     return () => {
       map.remove()
       mapRef.current = null
+      setMapReady(false)
     }
   }, [])
 
@@ -64,7 +69,7 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
   // Update markers when destinations change
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
+    if (!map || !mapReady) return
 
     // Clear old markers
     markersRef.current.forEach((m) => m.remove())
@@ -77,10 +82,14 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
     valid.forEach((dest, i) => {
       const el = document.createElement('div')
       el.dataset.id = dest.id
-      el.className =
-        'flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shadow-lg border-2 border-white transition-all duration-300 maplibregl-marker-custom'
-      el.textContent = `${i + 1}`
+      el.className = 'maplibregl-marker-custom'
       el.style.cursor = 'pointer'
+
+      const content = document.createElement('div')
+      content.className =
+        'flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shadow-lg border-2 border-white transition-all duration-300'
+      content.textContent = `${i + 1}`
+      el.append(content)
       
       el.onclick = (e) => {
         e.stopPropagation()
@@ -104,7 +113,7 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
       valid.forEach((d) => bounds.extend([d.lng!, d.lat!]))
       map.fitBounds(bounds, { padding: 80, maxZoom: 15, duration: 600 })
     }
-  }, [destinations, onMarkerClick])
+  }, [destinations, mapReady, onMarkerClick])
 
   // Update route polyline
   useEffect(() => {
@@ -152,15 +161,17 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
   // Fly to focused coordinate and animate marker when a destination is clicked in the list
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
+    if (!map || !mapReady) return
 
     const targetDest = destinations.find(d => d.id === focusedId)
 
     const focusChanged = focusedId !== prevFocusedId.current
+    const focusRequested = focusRequest !== prevFocusRequest.current
     prevFocusedId.current = focusedId
+    prevFocusRequest.current = focusRequest
 
-    // Only fly if the interaction came from the sidebar/list and focus actually changed
-    if (focusChanged && lastInteraction.current !== 'map' && targetDest && targetDest.lat != null && targetDest.lng != null) {
+    // Only fly for sidebar requests; marker clicks should not move the camera.
+    if ((focusChanged || focusRequested) && lastInteraction.current !== 'map' && targetDest && targetDest.lat != null && targetDest.lng != null) {
       map.flyTo({ center: [targetDest.lng, targetDest.lat], zoom: 16, duration: 800 })
     }
     
@@ -169,16 +180,19 @@ export default function MapView({ destinations, routeGeometry, focusedId, onMapC
 
     // Toggle animation classes on marker elements
     markersRef.current.forEach((marker) => {
-      const el = marker.getElement()
-      if (el.dataset.id === focusedId) {
-        el.classList.remove('bg-indigo-600')
-        el.classList.add('animate-bounce', 'bg-amber-500', 'ring-4', 'ring-amber-400/50', 'scale-125', 'z-10')
+      const markerElement = marker.getElement()
+      const content = markerElement.firstElementChild
+      if (!(content instanceof HTMLElement)) return
+
+      if (markerElement.dataset.id === focusedId) {
+        content.classList.remove('bg-indigo-600')
+        content.classList.add('motion-safe:animate-bounce', 'bg-amber-500', 'ring-4', 'ring-amber-400/50', 'scale-125', 'z-10')
       } else {
-        el.classList.remove('animate-bounce', 'bg-amber-500', 'ring-4', 'ring-amber-400/50', 'scale-125', 'z-10')
-        el.classList.add('bg-indigo-600')
+        content.classList.remove('motion-safe:animate-bounce', 'bg-amber-500', 'ring-4', 'ring-amber-400/50', 'scale-125', 'z-10')
+        content.classList.add('bg-indigo-600')
       }
     })
-  }, [focusedId, destinations])
+  }, [focusedId, focusRequest, destinations, mapReady])
 
   return <div ref={containerRef} className="h-full w-full" />
 }

@@ -51,10 +51,18 @@ export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [showMissingKeyBanner, setShowMissingKeyBanner] = useState(() => !ORS_API_KEY)
   const [focusedId, setFocusedId] = useState<string | null>(null)
+  const [focusRequest, setFocusRequest] = useState(0)
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)
   const directionsAbortRef = useRef<AbortController | null>(null)
   const optimizeAbortRef = useRef<AbortController | null>(null)
+  const routeRequestIdRef = useRef(0)
   const mapClickQueue = useRef<Promise<void>>(Promise.resolve())
+
+  const cancelRouteRequests = useCallback(() => {
+    routeRequestIdRef.current += 1
+    directionsAbortRef.current?.abort()
+    optimizeAbortRef.current?.abort()
+  }, [])
 
   useEffect(() => {
     if (!state.maxWarn) return
@@ -71,6 +79,7 @@ export default function App() {
       dispatch({ type: 'SET_ERROR', payload: `"${result.label}" no tiene coordenadas disponibles. Probá con un lugar más específico.` })
       return
     }
+    cancelRouteRequests()
     const newId = String(nextId++)
     dispatch({
       type: 'ADD_DESTINATION',
@@ -83,13 +92,14 @@ export default function App() {
     })
     if (state.route) dispatch({ type: 'SET_ROUTE', payload: null })
     if (focus) setFocusedId(newId)
-  }, [state.destinations.length, state.route])
+  }, [cancelRouteRequests, state.destinations.length, state.route])
 
   const handleOptimize = useCallback(async (dests?: Destination[]) => {
     const targets = dests ?? state.destinations
     if (targets.length < 2) return
 
-    optimizeAbortRef.current?.abort()
+    cancelRouteRequests()
+    const requestId = routeRequestIdRef.current
     const controller = new AbortController()
     optimizeAbortRef.current = controller
 
@@ -120,19 +130,20 @@ export default function App() {
         finalDirections = await getDirections(finalOrderedDestinations, controller.signal)
       }
 
+      if (requestId !== routeRequestIdRef.current) return
       dispatch({ type: 'SET_DESTINATIONS', payload: finalOrderedDestinations })
       dispatch({ type: 'SET_ROUTE', payload: createRouteResult(finalOrderedDestinations, finalDirections) })
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return
+      if ((err as Error).name === 'AbortError' || requestId !== routeRequestIdRef.current) return
       console.error('Route optimization failed:', err)
       const msg = err instanceof Error ? err.message : String(err)
       dispatch({ type: 'SET_ERROR', payload: `Error al optimizar la ruta: ${msg}` })
     } finally {
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && requestId === routeRequestIdRef.current) {
         dispatch({ type: 'SET_LOADING', payload: false })
       }
     }
-  }, [state.destinations])
+  }, [cancelRouteRequests, state.destinations])
 
   const removeDestination = useCallback((id: string) => {
     const remaining = state.destinations.filter((d) => d.id !== id)
@@ -140,33 +151,36 @@ export default function App() {
     if (focusedId === id) setFocusedId(null)
 
     if (!state.route || remaining.length < 2) {
+      cancelRouteRequests()
       dispatch({ type: 'SET_ROUTE', payload: null })
       return
     }
 
     handleOptimize(remaining)
-  }, [state.destinations, state.route, handleOptimize, focusedId])
+  }, [cancelRouteRequests, state.destinations, state.route, handleOptimize, focusedId])
 
   const handleReorderDirections = useCallback(async (dests: Destination[]) => {
-    directionsAbortRef.current?.abort()
+    cancelRouteRequests()
+    const requestId = routeRequestIdRef.current
     const controller = new AbortController()
     directionsAbortRef.current = controller
 
     dispatch({ type: 'SET_LOADING', payload: true })
     try {
       const dir = await getDirections(dests, controller.signal)
+      if (requestId !== routeRequestIdRef.current) return
       dispatch({ type: 'SET_ROUTE', payload: createRouteResult(dests, dir) })
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return
+      if ((err as Error).name === 'AbortError' || requestId !== routeRequestIdRef.current) return
       const msg = err instanceof Error ? err.message : 'Error al calcular la ruta'
       dispatch({ type: 'SET_ERROR', payload: msg })
       dispatch({ type: 'SET_ROUTE', payload: null })
     } finally {
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && requestId === routeRequestIdRef.current) {
         dispatch({ type: 'SET_LOADING', payload: false })
       }
     }
-  }, [])
+  }, [cancelRouteRequests])
 
   const reorderDestinations = useCallback((from: number, to: number) => {
     const reordered = [...state.destinations]
@@ -176,8 +190,10 @@ export default function App() {
 
     if (state.route) {
       handleReorderDirections(reordered)
+    } else {
+      cancelRouteRequests()
     }
-  }, [state.destinations, state.route, handleReorderDirections])
+  }, [cancelRouteRequests, state.destinations, state.route, handleReorderDirections])
 
   // Parse shared URL on mount
   useEffect(() => {
@@ -231,23 +247,30 @@ export default function App() {
   }, [state.route])
 
   return (
-    <div className="flex h-svh w-svw flex-col bg-stone-900 text-white md:flex-row">
+    <div className="relative flex h-svh w-svw overflow-hidden bg-[#0f1010] text-white md:flex-row">
       {/* Sidebar */}
-      <aside className="flex w-full flex-col overflow-y-auto border-stone-700 bg-stone-900 md:w-96 md:border-r">
+      <aside className="absolute inset-x-0 bottom-0 z-20 flex max-h-[78svh] w-full flex-col overscroll-contain overflow-y-auto rounded-t-3xl border border-white/10 bg-[#151615]/[0.97] pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black/40 backdrop-blur-xl md:relative md:inset-auto md:z-auto md:h-full md:max-h-none md:overflow-hidden md:rounded-none md:border-y-0 md:border-l-0 md:border-r md:bg-[#151615] md:pb-0 md:shadow-2xl">
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/15 md:hidden" aria-hidden="true" />
         {/* Header */}
-        <header className="border-b border-stone-700">
-          <div className="p-4 flex items-center justify-between">
-            <h1 className="text-lg font-bold tracking-tight">
-              mapia{' '}
-              <span className="text-xs font-normal text-stone-500">
-                — optimizador de rutas
-              </span>
-            </h1>
+        <header className="border-b border-white/10 bg-[#191a19] md:static">
+          <div className="flex items-center justify-between px-5 py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-indigo-500 text-sm font-black text-white shadow-lg shadow-indigo-950/40">
+                m.
+              </div>
+              <div>
+                <h1 className="text-base font-bold tracking-tight text-stone-100">mapia</h1>
+                <p className="text-[11px] text-stone-500">Planificá mejor. Llegá más lejos.</p>
+              </div>
+            </div>
+            <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+              Beta
+            </span>
           </div>
           {showMissingKeyBanner && (
-            <div className="flex items-start gap-2 border-t border-amber-700 bg-amber-900/60 px-4 py-2 text-xs text-amber-200">
+            <div className="mx-4 mb-4 flex items-start gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2.5 text-xs text-amber-200">
               <span className="flex-1">
-                API Key no detectada. Configurá <code className="rounded bg-amber-800/50 px-1">VITE_ORS_API_KEY</code> en tu entorno.
+                API Key no detectada. Configurá <code className="break-all rounded bg-amber-800/50 px-1">VITE_ORS_API_KEY</code> en tu entorno.
               </span>
               <button
                 onClick={() => setShowMissingKeyBanner(false)}
@@ -264,35 +287,49 @@ export default function App() {
         </header>
 
         {/* Search */}
-        <div className="border-b border-stone-700 p-4">
+        <div className="relative z-30 border-b border-white/10 px-4 py-4">
+          <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-500">Nuevo destino</p>
           <SearchBar onSelect={addDestination} />
         </div>
 
         {/* Destination list */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-stone-400">
-              Destinos ({state.destinations.length}/{MAX_DESTINATIONS})
-            </h2>
+        <div className="flex-none overflow-visible px-4 py-5 md:min-h-0 md:flex-1 md:overflow-y-auto">
+          <div className="mb-3 flex items-end justify-between px-1">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-300">Tu recorrido</p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight text-stone-100">Destinos</h2>
+            </div>
+            <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-stone-400">
+              {state.destinations.length} / {MAX_DESTINATIONS}
+            </span>
           </div>
-          <DestinationList
-            destinations={state.destinations}
-            onRemove={removeDestination}
-            onReorder={reorderDestinations}
-            onFocus={(d) => setFocusedId(d.id)}
-            onTogglePin={(id) => {
-              dispatch({ type: 'TOGGLE_PIN', payload: id })
-              if (state.route) dispatch({ type: 'SET_ROUTE', payload: null })
-            }}
-            focusedId={focusedId}
-            maxWarn={state.maxWarn}
-          />
+          <p className="mb-4 px-1 text-xs leading-relaxed text-stone-500">
+            Hacé clic en una dirección para ubicarla en el mapa. Arrastrá para cambiar el orden.
+          </p>
+          <div>
+            <DestinationList
+              destinations={state.destinations}
+              onRemove={removeDestination}
+              onReorder={reorderDestinations}
+              onFocus={(d) => {
+                setFocusedId(d.id)
+                setFocusRequest((request) => request + 1)
+              }}
+              onTogglePin={(id) => {
+                cancelRouteRequests()
+                dispatch({ type: 'TOGGLE_PIN', payload: id })
+                if (state.route) dispatch({ type: 'SET_ROUTE', payload: null })
+              }}
+              focusedId={focusedId}
+              maxWarn={state.maxWarn}
+            />
+          </div>
         </div>
 
         {/* Route panel */}
-        <div className="border-t border-stone-700 p-4">
+        <div className="border-t border-white/10 bg-[#191a19] px-4 py-4 md:max-h-[48%] md:min-h-0 md:overflow-y-auto">
           {state.errorMsg && (
-            <div className="mb-2 flex items-start gap-2 rounded bg-red-900/50 px-3 py-2 text-xs text-red-300">
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2.5 text-xs text-red-200">
               <span className="flex-1">{state.errorMsg}</span>
               <button
                 onClick={() => dispatch({ type: 'SET_ERROR', payload: null })}
@@ -316,7 +353,10 @@ export default function App() {
           {state.route && (
             <RoutePanel
               route={state.route}
-              onReset={() => dispatch({ type: 'RESET' })}
+              onReset={() => {
+                cancelRouteRequests()
+                dispatch({ type: 'RESET' })
+              }}
               onShare={shareAppUrl}
               shareFeedback={shareFeedback}
             />
@@ -324,11 +364,12 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1">
+      <main className="absolute inset-0 min-h-0 min-w-0 md:relative md:flex-1">
         <MapView
           destinations={state.route?.orderedDestinations ?? state.destinations}
           routeGeometry={state.route?.geometry ?? null}
           focusedId={focusedId}
+          focusRequest={focusRequest}
           onMarkerClick={setFocusedId}
           onMapClick={(lat, lng) => {
             mapClickQueue.current = mapClickQueue.current.then(async () => {

@@ -42,13 +42,15 @@ function SortableItem({
     opacity: isDragging ? 0.5 : undefined,
   }
 
-  const baseClasses = "group flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-all duration-300"
-  let activeClasses = isFocused ? "bg-stone-700/80 ring-1 shadow-lg scale-[1.02] " : "hover:bg-stone-700/50 "
+  const baseClasses = "group flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-3 transition-all duration-200"
+  let activeClasses = isFocused
+    ? "border-indigo-400/40 bg-indigo-500/10 shadow-lg shadow-indigo-950/30 "
+    : "border-white/5 bg-white/[0.025] hover:border-white/10 hover:bg-white/[0.05] "
   
   if (dest.isPinned) {
-    activeClasses += isFocused ? "ring-amber-500 shadow-amber-900/20" : "bg-amber-900/10 border border-amber-900/30"
+    activeClasses += isFocused ? "border-amber-400/40 shadow-amber-950/30" : "border-amber-500/20 bg-amber-500/[0.06]"
   } else {
-    activeClasses += isFocused ? "ring-indigo-500 shadow-indigo-900/20" : ""
+    activeClasses += isFocused ? "shadow-indigo-950/30" : ""
   }
 
   return (
@@ -56,11 +58,36 @@ function SortableItem({
       ref={setNodeRef}
       style={style}
       onClick={() => onFocus(dest)}
-      className={`${baseClasses} ${activeClasses}`}
-      {...attributes}
-      {...listeners}
+      onKeyDown={(event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) {
+          event.preventDefault()
+          onFocus(dest)
+        }
+      }}
+      tabIndex={0}
+      aria-current={isFocused ? 'true' : undefined}
+      className={`${baseClasses} min-h-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${activeClasses}`}
     >
-      <span className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white transition-colors duration-300 ${dest.isPinned ? 'bg-amber-600' : isFocused ? 'bg-indigo-500' : 'bg-indigo-600'}`}>
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        onClick={(event) => event.stopPropagation()}
+        className="flex size-8 shrink-0 touch-none cursor-grab items-center justify-center rounded-lg border border-white/10 bg-black/20 text-stone-500 transition-colors hover:border-white/20 hover:text-stone-200 active:cursor-grabbing"
+        aria-label={`Reordenar ${dest.name}`}
+        title="Arrastrar para reordenar"
+      >
+        <svg className="size-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="4" r="1" />
+          <circle cx="11" cy="4" r="1" />
+          <circle cx="5" cy="8" r="1" />
+          <circle cx="11" cy="8" r="1" />
+          <circle cx="5" cy="12" r="1" />
+          <circle cx="11" cy="12" r="1" />
+        </svg>
+      </button>
+
+      <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white transition-colors duration-300 ${dest.isPinned ? 'bg-amber-500' : isFocused ? 'bg-indigo-500' : 'bg-indigo-600'}`}>
         {index + 1}
       </span>
 
@@ -73,18 +100,19 @@ function SortableItem({
             </svg>
           )}
         </div>
-        <p className={`text-xs transition-colors duration-300 ${isFocused ? 'text-stone-400' : 'text-stone-500'}`}>
+        <p className={`text-[11px] transition-colors duration-300 ${isFocused ? 'text-stone-400' : 'text-stone-500'}`}>
           {dest.lat.toFixed(4)}, {dest.lng.toFixed(4)}
         </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+      <div className="flex shrink-0 items-center gap-1">
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation()
             onTogglePin(dest.id)
           }}
-          className={`shrink-0 rounded p-1.5 transition-colors ${dest.isPinned ? 'bg-amber-600/20 text-amber-500 hover:bg-amber-600 hover:text-white' : 'text-stone-500 hover:bg-stone-700 hover:text-stone-300'}`}
+          className={`flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 ${dest.isPinned ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500 hover:text-white' : 'text-stone-500 hover:bg-white/10 hover:text-stone-200'}`}
           title={dest.isPinned ? "Desfijar (Permitir optimizar)" : "Fijar al inicio (No cambiar de lugar)"}
           aria-label={dest.isPinned ? `Desfijar ${dest.name}` : `Fijar ${dest.name}`}
         >
@@ -93,11 +121,12 @@ function SortableItem({
           </svg>
         </button>
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation()
             onRemove(dest.id)
           }}
-          className="shrink-0 rounded p-1.5 text-stone-500 transition-colors hover:bg-red-600 hover:text-white"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-stone-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/70 hover:bg-red-500/20 hover:text-red-300"
           title="Eliminar"
           aria-label={`Eliminar ${dest.name}`}
         >
@@ -126,8 +155,8 @@ export default function DestinationList({
 
   if (destinations.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-stone-500">
-        Buscá destinos para agregar al mapa
+      <p className="rounded-xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-stone-500">
+        Buscá una dirección para agregarla al mapa
       </p>
     )
   }
@@ -146,8 +175,8 @@ export default function DestinationList({
   return (
     <>
       {maxWarn && (
-        <p className="mb-2 rounded bg-amber-900/50 px-3 py-1.5 text-xs text-amber-300">
-          Máximo de {destinations.length} destinos alcanzado
+        <p className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          Llegaste al máximo de {destinations.length} destinos
         </p>
       )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

@@ -7,3 +7,40 @@ html, body, #app {
   height: 100%;
   width: 100%;
 }
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button, a, input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgb(129 140 248 / 0.9);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .maplibregl-ctrl-top-right {
+    top: 0.75rem;
+    right: 0.75rem;
+  }
+}
